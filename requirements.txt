@@ -1,0 +1,5 @@
+grpcio==1.46.0
+grpcio-tools==1.46.0
+numpy
+scikit-learn
+grpcio-reflection

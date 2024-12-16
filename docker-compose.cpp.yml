@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: src/cpp/server/server.Dockerfile
+    container_name: pointcloud_server_cpp
+    ports:
+      - "1111:1111"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./results:/app/results
+
+  client:
+    build:
+      context: .
+      dockerfile: src/cpp/client/client.Dockerfile
+    container_name: pointcloud_client_cpp
+    depends_on:
+      - server
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./results:/app/results

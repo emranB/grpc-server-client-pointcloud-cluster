@@ -1,0 +1,24 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 1111
+  },
+  "client": {
+    "input_file": "/app/data/oct-1-small.pcd",
+    "chunk_size": 500,
+    "remote_host": "pointcloud_server",
+    "remote_port": 1111
+  },
+  "clustering": {
+    "eps": 50.0,
+    "min_samples": 3
+  },
+  "z_thresholds": {
+    "max_percentile": 80,
+    "min_percentile": 15
+  },
+  "debug": {
+    "enable": true,
+    "input_labels_file": "/app/data/oct-1-small.labels"
+  }
+}
