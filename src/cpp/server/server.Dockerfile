@@ -1,47 +1,49 @@
-# Server Dockerfile
-# Description: Builds the server container for the C++ gRPC application.
-# Installs dependencies, compiles protobuf and gRPC files, and builds the server executable.
-
+# Use Ubuntu 22.04 as the base image
 FROM ubuntu:22.04
 
-# Set the working directory
+# Set non-interactive installation mode
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary dependencies and gRPC dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    cmake \
+    build-essential \
+    autoconf \
+    libtool \
+    pkg-config \
+    wget \
+    protobuf-compiler \
+    libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone the gRPC repository and its submodules
+RUN git clone --recurse-submodules -b v1.66.0 https://github.com/grpc/grpc
+
+# Build and install gRPC and its dependencies
+WORKDIR /grpc/cmake/build
+RUN cmake -DgRPC_INSTALL=ON \
+          -DgRPC_BUILD_TESTS=OFF \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          ../.. \
+    && make -j$(nproc) \
+    && make install
+
+# Set the working directory for the application
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential cmake git wget curl \
-    libprotobuf-dev protobuf-compiler \
-    zlib1g-dev libssl-dev libabsl-dev \
-    && apt-get clean
+# Copy the necessary application files
+COPY . /app
 
-# Build and install nlohmann/json from source
-RUN git clone https://github.com/nlohmann/json.git /tmp/json && \
-    cd /tmp/json && \
-    mkdir -p build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    make install && \
-    ldconfig
+# Generate the .pb.cc and .pb.h files from pointcloud.proto using protoc
+RUN mkdir -p /app/src/cpp/server/build && \
+    protoc -I=/app --cpp_out=/app/src/cpp/server/build /app/pointcloud.proto && \
+    protoc -I=/app --grpc_out=/app/src/cpp/server/build --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin /app/pointcloud.proto
 
-# Build and install gRPC from source
-RUN git clone --recurse-submodules -b v1.55.0 https://github.com/grpc/grpc.git /tmp/grpc && \
-    cd /tmp/grpc && \
-    mkdir -p cmake/build && cd cmake/build && \
-    cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ../.. && \
-    make -j$(nproc) && make install && \
-    ldconfig
+# Build the server
+RUN cd /app/src/cpp/server/build && \
+    cmake -DCMAKE_PREFIX_PATH=/usr/local .. && \
+    make -j$(nproc)
 
-# Copy project files
-COPY src/cpp/server/server.cpp /app/server.cpp
-COPY src/cpp/server/server-setup.sh /app/server-setup.sh
-COPY src/cpp/server/server.sh /app/server.sh
-COPY src/cpp/server/CMakeLists.txt /app/CMakeLists.txt
-COPY pointcloud.proto /app/pointcloud.proto
-
-# Make scripts executable
-RUN chmod +x /app/server-setup.sh /app/server.sh
-
-# Run server setup script to generate and compile protobuf/gRPC files
-RUN ./server-setup.sh
-
-# Set the entrypoint to server.sh
-ENTRYPOINT ["/app/server.sh", "--config=/app/config.json"]
+# Run the server directly (no entrypoint needed)
+CMD ["/app/src/cpp/server/build/server"]

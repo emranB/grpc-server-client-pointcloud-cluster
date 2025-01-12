@@ -1,92 +1,57 @@
+import open3d as o3d
+import numpy as np
 import argparse
 
-import numpy as np
-import open3d as o3d
+# Function to load point cloud and labels
+def load_data(pcd_file, labels_file):
+    # Read PCD file
+    pcd = o3d.io.read_point_cloud(pcd_file)
+    points = np.asarray(pcd.points)
 
+    # Read Labels file
+    labels = np.loadtxt(labels_file, dtype=int)
 
-def read_pcd(path: str) -> np.array:
-    """
-    This is an error-prone bad implementation of PCD reading which ignores all metadata. Do NOT re-use this function in
-    your implementation of the client.
+    return points, labels
 
-    :param path:
-    :return:
-    """
-    with open(path, "r") as f:
-        lines = [line.replace("\n", "") for line in f.readlines()]
+# Function to count points by label
+def count_labels(labels):
+    unique, counts = np.unique(labels, return_counts=True)
+    label_counts = dict(zip(unique, counts))
+    return label_counts
 
-    data = lines[10:]
-    points = []
-    for point in data:
-        coords = [float(num) for num in point.split(" ")]
-        points.append(coords)
-    return np.array(points)
+# Visualize point cloud
+def visualize(points, labels):
+    colors = np.zeros((len(points), 3))  # Initialize color array
 
+    # Assign colors based on label
+    colors[labels == 0] = [0.0, 0.0, 1.0]  # Blue for label 0
+    colors[labels == 1] = [0.0, 1.0, 0.0]  # Green for label 1
+    colors[labels == 2] = [1.0, 0.0, 0.0]  # Red for label 2
 
-def visualize(points: np.array, labels: np.array = None) -> None:
+    # Visualize point cloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([pcd])
 
-    assert points.shape[0] == labels.shape[0]
+# Main function to handle command-line arguments
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Visualize Point Cloud with Labels")
+    parser.add_argument('-i', '--pcd', type=str, required=True, help="Path to the .pcd file")
+    parser.add_argument('-l', '--labels', type=str, required=True, help="Path to the .labels file")
+    
+    args = parser.parse_args()
 
-    if labels is not None:
-        # We generate a unique color for every unique label
-        colors = [
-            (0.584, 0.804, 0.843)  # Light blue, unknown
-            if label == 0
-            else (0.106, 0.424, 0.636)  # Dark blue cortical surface
-            if label == 1
-            else (0.498, 0.306, 0.27)  # Brown, dura
-            if label == 2
-            else None
-            for label in labels
-        ]
-        assert not any(map(lambda x: x is None, colors)), "This visualizer only supports labels 0-2"
-        assert points.shape[0] == len(
-            colors
-        ), f"The number of points must match the number of labels. {points.shape[0]} != {len(labels)}"
+    # Load and analyze data
+    points, labels = load_data(args.pcd, args.labels)
 
-        # Assign the colors to the pointcloud
-        pcd.colors = o3d.utility.Vector3dVector(colors)
+    # Count and print labels
+    label_counts = count_labels(labels)
+    print("Label counts:", label_counts)
 
-    # Display the point cloud
-    o3d.visualization.draw_geometries(
-        [
-            pcd,
-            o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=[0, 0, 0]),
-        ]
-    )
-
-
-def parse_label(path: str) -> np.array:
-    """
-    Assumes that the labels have the same length and same order as the points in the PCD input file
-    It also assumes that labels are real integer values.
-
-    :param path:
-    :return:
-    """
-    with open(path, "r") as f:
-        labels = [int(label.replace("\n", "")) for label in f.readlines()]
-        return np.array(labels)
-
-
-def parse_arguments():
-    ap = argparse.ArgumentParser(description="Visualize PCD file")
-    ap.add_argument("-i", "--path-to-pcd", required=True, type=str, help="Input PCD file")
-    ap.add_argument(
-        "-l",
-        "--labels",
-        required=False,
-        type=str,
-        help="Cluster label file. Text file where each line contains one int label per point",
-    )
-    return ap.parse_args()
-
+    # Visualize the point cloud
+    visualize(points, labels)
 
 if __name__ == "__main__":
-    args = parse_arguments()
-
-    labels = parse_label(args.labels) if args.labels else None
-    points = read_pcd(args.path_to_pcd)
-    visualize(points, labels=labels)
+    main()

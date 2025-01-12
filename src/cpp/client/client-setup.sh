@@ -1,30 +1,26 @@
 #!/bin/bash
+# Client setup script for building gRPC and client
 
-# Description: Sets up the C++ client environment, compiles the gRPC files, and builds the client binary.
-set -e  # Exit immediately if a command fails
+set -e
 
-echo "Setting up the C++ client..."
+# Update and install necessary packages
+apt-get update
+apt-get install -y \
+    git \
+    cmake \
+    build-essential \
+    autoconf \
+    libtool \
+    pkg-config \
+    wget \
+    protobuf-compiler \
+    libprotobuf-dev
+rm -rf /var/lib/apt/lists/*
 
-# Ensure build directory exists
-mkdir -p /app/build
-
-# Generate gRPC and Protobuf code
-echo "Generating gRPC and protobuf files..."
-protoc -I /app \
-  --cpp_out=/app/build \
-  --grpc_out=/app/build \
-  --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin \
-  /app/pointcloud.proto
-
-echo "Generated gRPC and protobuf files successfully."
-
-# Compile the client binary
-echo "Compiling the C++ client..."
-g++ -std=c++17 -o /app/client \
-  /app/client.cpp \
-  /app/build/pointcloud.pb.cc \
-  /app/build/pointcloud.grpc.pb.cc \
-  -I/usr/local/include -L/usr/local/lib \
-  -lgrpc++ -lgrpc -lprotobuf -lpthread
-
-echo "C++ client compiled successfully."
+# Clone and build gRPC
+git clone --recurse-submodules -b v1.66.0 https://github.com/grpc/grpc
+mkdir -p /grpc/cmake/build
+cd /grpc/cmake/build
+cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ../..
+make -j$(nproc)
+make install

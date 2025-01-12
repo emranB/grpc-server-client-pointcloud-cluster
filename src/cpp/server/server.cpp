@@ -1,18 +1,13 @@
-/*
- * File: server.cpp
- * Description: gRPC server that processes incoming point cloud data, performs clustering, and assigns labels.
- * Dynamically loads configuration (host, port, clustering parameters, etc.) from config.json.
- */
-
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <string>
+#include <cstdlib>
+#include <ctime>
+#include <vector>
 #include <grpcpp/grpcpp.h>
 #include "pointcloud.pb.h"
 #include "pointcloud.grpc.pb.h"
-#include <nlohmann/json.hpp>
-#include <vector>
-#include <cmath>
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -20,42 +15,45 @@ using grpc::ServerContext;
 using grpc::ServerReaderWriter;
 using grpc::Status;
 using namespace pointcloud;
-using json = nlohmann::json;
 
-// Server implementation of NLPointCloudService
 class PointCloudServiceImpl final : public NLPointCloudService::Service {
 private:
-    double eps_;
-    int min_samples_;
-    int max_percentile_;
-    int min_percentile_;
+    double m_eps;
+    int m_minSamples;
+    int m_maxPercentile;
+    int m_minPercentile;
+
+    int duraCount = 0;
+    int corticalCount = 0;
+    int unknownCount = 0;
 
 public:
-    // Constructor to initialize clustering parameters from config.json
-    PointCloudServiceImpl(double eps, int min_samples, int max_p, int min_p)
-        : eps_(eps), min_samples_(min_samples), max_percentile_(max_p), min_percentile_(min_p) {}
+    PointCloudServiceImpl(double eps, int minSamples, int maxPercentile, int minPercentile)
+        : m_eps(eps), m_minSamples(minSamples), m_maxPercentile(maxPercentile), m_minPercentile(minPercentile) {}
 
-    // Implementation of the Cluster RPC method
     Status Cluster(ServerContext* context,
                    ServerReaderWriter<NLClusterResponse, NLChunkRequest>* stream) override {
         std::cout << "Received a clustering request." << std::endl;
 
-        NLChunkRequest chunk_request;
-        while (stream->Read(&chunk_request)) {
-            std::cout << "Processing chunk with " << chunk_request.points_size() << " points." << std::endl;
+        NLChunkRequest chunkRequest;
+        while (stream->Read(&chunkRequest)) {
+            std::cout << "Processing chunk with " << chunkRequest.points_size() << " points." << std::endl;
 
             // Process each point in the chunk
-            for (const auto& point : chunk_request.points()) {
+            for (const auto& point : chunkRequest.points()) {
                 NLClusterResponse response;
                 response.set_point_id(point.id());
 
                 // Simple dummy clustering logic based on z-value
-                if (point.z() > max_percentile_) {
+                if (point.z() > m_maxPercentile) {
                     response.set_label(NLClusterLabel::DURA);
-                } else if (point.z() < min_percentile_) {
+                    duraCount++;
+                } else if (point.z() < m_minPercentile) {
                     response.set_label(NLClusterLabel::CORTICAL_SURFACE);
+                    corticalCount++;
                 } else {
                     response.set_label(NLClusterLabel::UNKNOWN);
+                    unknownCount++;
                 }
 
                 stream->Write(response);  // Stream the response
@@ -63,13 +61,23 @@ public:
         }
 
         std::cout << "Finished processing the clustering request." << std::endl;
+
+        // Optionally, return a summary after processing all chunks
+        NLClusterResponse summaryResponse;
+        summaryResponse.set_point_id(-1); // Use -1 to indicate it's a summary
+        summaryResponse.set_label(NLClusterLabel::UNKNOWN); // Can be any label for summary
+
+        // Add counts as metadata for summary
+        summaryResponse.set_label(NLClusterLabel::DURA); // Dura count
+        stream->Write(summaryResponse);  // Stream the summary response
+
         return Status::OK;
     }
 };
 
 // Function to run the gRPC server
-void RunServer(const std::string& address, double eps, int min_samples, int max_p, int min_p) {
-    PointCloudServiceImpl service(eps, min_samples, max_p, min_p);
+void runServer(const std::string& address, double eps, int minSamples, int maxPercentile, int minPercentile) {
+    PointCloudServiceImpl service(eps, minSamples, maxPercentile, minPercentile);
 
     ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
@@ -81,33 +89,27 @@ void RunServer(const std::string& address, double eps, int min_samples, int max_
 }
 
 int main(int argc, char* argv[]) {
-    std::string config_file = "/app/config.json";
+    // Fetch environment variables
+    const char* host = std::getenv("HOST");
+    const char* port = std::getenv("PORT");
+    const char* eps = std::getenv("EPS");
+    const char* minSamples = std::getenv("MIN_SAMPLES");
+    const char* maxPercentile = std::getenv("MAX_PERCENTILE");
+    const char* minPercentile = std::getenv("MIN_PERCENTILE");
 
-    // Read server and clustering configuration
-    std::ifstream input(config_file);
-    if (!input.is_open()) {
-        std::cerr << "Error: Unable to open config file: " << config_file << std::endl;
+    if (!host || !port || !eps || !minSamples || !maxPercentile || !minPercentile) {
+        std::cerr << "Environment variables are missing. Please ensure all configurations are set." << std::endl;
         return 1;
     }
 
-    json config;
-    input >> config;
+    std::string serverAddress = std::string(host) + ":" + std::string(port);
+    double epsilon = std::stod(eps);
+    int minimumSamples = std::stoi(minSamples);
+    int maximumPercentile = std::stoi(maxPercentile);
+    int minimumPercentile = std::stoi(minPercentile);
 
-    std::string server_address = config["server"]["host"].get<std::string>() + ":" +
-                                 std::to_string(config["server"]["port"].get<int>());
-
-    double eps = config["clustering"]["eps"].get<double>();
-    int min_samples = config["clustering"]["min_samples"].get<int>();
-    int max_percentile = config["z_thresholds"]["max_percentile"].get<int>();
-    int min_percentile = config["z_thresholds"]["min_percentile"].get<int>();
-
-    std::cout << "Using configuration file: " << config_file << std::endl;
-    std::cout << "Server Address: " << server_address << std::endl;
-    std::cout << "Clustering Parameters: eps=" << eps << ", min_samples=" << min_samples
-              << ", max_percentile=" << max_percentile << ", min_percentile=" << min_percentile << std::endl;
-
-    // Run the server
-    RunServer(server_address, eps, min_samples, max_percentile, min_percentile);
+    // Run the server with parameters from environment variables
+    runServer(serverAddress, epsilon, minimumSamples, maximumPercentile, minimumPercentile);
 
     return 0;
 }

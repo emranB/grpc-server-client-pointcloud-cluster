@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: src/cpp/server/server.Dockerfile
+    container_name: pointcloud_server_cpp
+    ports:
+      - "50051:50051"  # Exposing server on port 50051
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./results:/app/results
+    environment:
+      # Server configuration
+      HOST: "0.0.0.0"  # To listen on all available network interfaces
+      PORT: "50051"  # Server port
+      EPS: "0.5"  # Clustering epsilon parameter
+      MIN_SAMPLES: "5"  # Minimum samples for clustering
+      MAX_PERCENTILE: "95"  # Maximum percentile threshold for clustering
+      MIN_PERCENTILE: "5"  # Minimum percentile threshold for clustering
+      # Removed PCD_FILE and LABELS_FILE because the server doesn't need them
+      # PCD_FILE is not needed anymore because we are streaming the data from the client
+
+  client:
+    build:
+      context: .
+      dockerfile: src/cpp/client/client.Dockerfile
+    container_name: pointcloud_client_cpp
+    depends_on:
+      - server
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./results:/app/results
+    environment:
+      # Client configuration
+      CLIENT_REMOTE_HOST: "pointcloud_server_cpp"  # The server's hostname within the Docker network
+      CLIENT_REMOTE_PORT: "50051"  # The port where the server is running
+      CLIENT_INPUT_FILE: "oct-2-small.pcd"  # Input file name only (to be sent to the server)
+      CLIENT_OUTPUT_FILE: "oct-2-small-output.labels"  # Output file name for saving the results
+      CLIENT_CHUNK_SIZE: "100"  # Number of points per chunk for streaming
