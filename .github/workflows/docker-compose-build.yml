@@ -1,6 +1,16 @@
+name: Docker Compose Build and Up
+
+on:
+  push:
+    branches:
+      - main   # Trigger on push to the main branch
+  pull_request:
+    branches:
+      - main   # Trigger on PR to the main branch
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Specify Ubuntu 22.04 as the runner environment
 
     steps:
     - name: Checkout code
@@ -17,10 +27,13 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-buildx-
 
-    - name: Set up Docker Compose
+    - name: Install Docker Compose
       run: |
         sudo apt-get update
         sudo apt-get install -y docker-compose
+
+    - name: Check Docker version
+      run: docker --version
 
     - name: Run docker compose build and up
       run: |
