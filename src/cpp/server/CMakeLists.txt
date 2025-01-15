@@ -7,12 +7,10 @@ project(PointCloudService LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Debug: Print source directory
-message(STATUS "CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR}")
-
-# Locate Protobuf and gRPC libraries
+# Locate Protobuf, gRPC, and fmt libraries
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
+find_package(fmt REQUIRED)  # Add fmt dependency
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/build)
@@ -30,5 +28,5 @@ message(STATUS "SERVER_CPP=${SERVER_CPP}")
 # Add the server executable
 add_executable(server ${SERVER_CPP} ${PROTO_SRCS})
 
-# Link Protobuf and gRPC libraries
-target_link_libraries(server gRPC::grpc++ protobuf::libprotobuf)
+# Link Protobuf, gRPC, and fmt libraries
+target_link_libraries(server gRPC::grpc++ protobuf::libprotobuf fmt::fmt)  # Link fmt here

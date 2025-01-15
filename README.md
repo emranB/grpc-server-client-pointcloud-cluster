@@ -1,102 +1,137 @@
-# gRPC Point Cloud Clustering Service
+# PointCloud Clustering Server and Client
 
-## Problem Overview
+This project provides a gRPC-based server and client for clustering point cloud data. The server processes point cloud data, classifies the points based on their `z` values, and streams the results back to the client. The project uses dynamic percentile calculations for clustering points.
 
-The goal is to implement a gRPC service for clustering point clouds from brain scans into three distinct groups:
-1. **Dura**: Top layer of the scan.
-2. **Cortical Surface**: Bottom layer of the scan.
-3. **Unknown**: Noise or artifacts between the layers.
-
-**Key Assumption**: The *negative-Z* direction is always *up* in the point cloud data.
-
-The input point cloud data is provided as `.PCD` files, and the output is a text file mapping each point ID to its cluster label.
-
----
-
-## Deliverables
-
-### 1. Docker Configuration
-- A `Dockerfile` to build and run the gRPC server.
-- The server must expose port `50051`.
-
-### 2. Server Implementation
-- A gRPC server implementing the `NLPointCloudService` interface defined in `pointcloud.proto`.
-- The `Cluster` RPC endpoint should:
-  - Accept streamed point cloud data from the client.
-  - Perform clustering and return cluster assignments for each point ID as a stream.
-
-### 3. Client Implementation
-- A client that supports the following arguments:
-  - `--host`: Server hostname or IP.
-  - `--port`: Server port.
-  - `--input`: Path to the `.PCD` file.
-  - `--output`: Path to the output text file containing cluster labels.
-- The client should:
-  - Read the `.PCD` file and stream points to the server.
-  - Save the cluster labels received from the server in the specified output file.
-
-### 4. Client Setup Script
-- A `client-setup.sh` script that prepares the client to run on a fresh Ubuntu 22.04 installation.
-- The client should be executed using the command: `./client`.
-
-### 5. Output Requirements
-- The output label file should map:
-  - **Point ID (line number)** → **Cluster label (Dura, Cortical Surface, Unknown)**.
-
----
-
-## Solution Requirements
+## Overview
 
 ### Server
-- Implement the `Cluster` RPC endpoint using a clustering algorithm of your choice.
-- The server should be capable of handling streamed data and provide cluster labels as a streamed response.
+
+The server uses `z` values to classify points into three categories:
+- `DURA` (points with `z` values above the calculated maximum percentile)
+- `CORTICAL_SURFACE` (points with `z` values below the calculated minimum percentile)
+- `UNKNOWN` (points with `z` values between the max and min percentiles)
+
+The server's behavior is controlled by environment variables provided via **Docker Compose**.
 
 ### Client
-- Assign unique IDs to points in the client.
-- Stream point cloud data to the server and process the server’s response to generate the output label file.
 
----
+The client sends point cloud data to the server, processes the server's responses, and writes the results to a file.
 
-## Discussion
+## Prerequisites
 
-### Known Limitations
-- Current solution is tailored for the provided dataset and might require tuning for other datasets.
-- Clustering implementation is simplified for demonstration purposes and might not be optimal.
+- Docker and Docker Compose
+- gRPC library
+- C++11 or higher
+- GitHub Actions for CI/CD
 
-### Production Recommendations
-- Add authentication to the gRPC service for secure communication.
-- Optimize clustering logic for scalability and performance.
-- Include automated tests to ensure reliability and accuracy.
+## Docker Compose Configuration
 
-### Clustering Approach
-- Clustering is performed by classifying points based on the Z-axis value:
-  - **Dura**: Points above a specified maximum percentile.
-  - **Cortical Surface**: Points below a specified minimum percentile.
-  - **Unknown**: Points between the two thresholds.
+Here’s an example of how to configure the server and client using Docker Compose:
 
----
+```yaml
+version: "3.8"
+services:
+  pointcloud_server:
+    build: .
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "1111"
+      SERVER_MAX_PERCENTILE: "80" # Percentage of z-values to classify as DURA
+      SERVER_MIN_PERCENTILE: "20" # Percentage of z-values to classify as CORTICAL_SURFACE
 
-## Additional Resources
+  pointcloud_client:
+    build: .
+    environment:
+      CLIENT_INPUT_FILE: "/app/data/oct-2-small.xyz"
+      CLIENT_OUTPUT_FILE: "/app/results/oct-2-small-output.labels"
+      CLIENT_LABELS_FILE: "/app/data/oct-2-small.labels"
+    depends_on:
+      - pointcloud_server
+```
 
-- Use the provided `visualize.py` script in the `help` folder to visualize the 3D OCT scans.
-- For more information on the `.PCD` file format, visit the [Point Cloud Library documentation](https://pointclouds.org/documentation/tutorials/pcd_file_format.html).
+## Server Configuration
+The following environment variables control the server behavior:
 
----
+- SERVER_HOST: The server address (default is 0.0.0.0).
+- SERVER_PORT: The server port (default is 1111).
+- SERVER_MAX_PERCENTILE: The maximum percentile to classify points as DURA.
+- SERVER_MIN_PERCENTILE: The minimum percentile to classify points as CORTICAL_SURFACE.
 
-## How to Run
+## Client Setup and Execution
 
-### Server
-1. Build and run the server using the provided `Dockerfile`.
-2. Ensure the server is running and listening on the correct port (default: `50051`).
+### Required Shell Scripts
 
-### Client
-1. Run the `client-setup.sh` script to prepare the client.
-2. Execute the client using the following command:
-    `./client --host <server_host> --port <server_port> --input <input_file> --output <output_file>`
+#### **client-setup.sh**
+The `client-setup.sh` script sets up the client environment by:
+- Installing all required dependencies, including `gRPC`, `protobuf`, and `fmt`.
+- Cloning the `gRPC` repository and building it from source.
+- Generating the necessary `.pb.cc` and `.pb.h` files using `protoc` for the gRPC service.
+- Compiling the client code and all necessary files.
+
+Run this script on a fresh Ubuntu machine to set up the client:
+
+```bash
+chmod +x client-setup.sh
+./client-setup.sh
+```
+
+#### **client.sh**
+The client.sh script is used to run the gRPC client with specific arguments for host, port, input file, and output file. It will:
+- Parse the provided arguments.
+- Set up the environment variables for the client.
+- Run the client to send the point cloud data to the server and receive results.
+
+To run the client, use the following command, replacing the necessary arguments:
+```bash
+chmod +x client.sh
+./client.sh --host <HOST> --port <PORT> --input <INPUT_FILE> --output <OUTPUT_FILE>
+```
+
+## Docker Usage
+You can also run the client in a Docker container by building and running the Docker image.
+
+### Build the Docker images:
+```bash
+- docker build -t pointcloud-client .
+- docker build -t pointcloud-server .
+```
+
+### Run the Docker containers:
+```bash
+- docker run -e CLIENT_REMOTE_HOST=<HOST> -e CLIENT_REMOTE_PORT=<PORT> -e CLIENT_INPUT_FILE=<INPUT_FILE> -e CLIENT_OUTPUT_FILE=<OUTPUT_FILE> pointcloud-client
+- docker run -e SERVER_HOST=<HOST> -e SERVER_PORT=<PORT> -e SERVER_MAX_PERCENTILE=<MAX_PERCENTILE> -e SERVER_MIN_PERCENTILE=<MIN_PERCENTILE> pointcloud-server
+```
+
+## Client Configuration
+The client requires the following environment variables:
+
+- CLIENT_INPUT_FILE: Path to the point cloud data input file.
+- CLIENT_OUTPUT_FILE: Path to the file to store output labels.
+- CLIENT_LABELS_FILE: Path to the expected labels file.
+
+## Docker compose usage:
+### Start the server and client using:
+```bash
+docker-compose -f docker-compose.cpp.yml up --build
+```
+
+- The server will listen for incoming connections, and the client will stream the point cloud data for clustering. 
+- The results will be written to the output file specified by CLIENT_OUTPUT_FILE.
+
+## Output Files
+
+When the program completes, the following files are generated in the `results` directory:
+
+- **<input-pcd-file-prefix>-output.expected**: Contains the expected results for clustering based on the ground truth labels. It includes the count and percentage of points categorized as `DURA`, `CORTICAL_SURFACE`, and `UNKNOWN`. This file is used to validate the clustering output.
+
+- **<input-pcd-file-prefix>-output.labels**: Contains the labels generated by the server for each point in the point cloud. Each point's ID is listed along with its corresponding label (`DURA`, `CORTICAL_SURFACE`, or `UNKNOWN`).
+
+- **<input-pcd-file-prefix>-output.summary**: Provides a summary of the clustering process, including:
+  - Total points received
+  - Total points processed
+  - Total points discarded
+  - The count and percentage of points labeled as `DURA`, `CORTICAL_SURFACE`, and `UNKNOWN`.
 
 
-
----
-
-## Transparency
-- If language models (like ChatGPT) were used in the implementation, the chat log has been included as part of the submission.
+## Conclusion
+This project provides a basic framework for processing point cloud data using dynamic percentile-based clustering, with easy-to-configure parameters through Docker Compose. 

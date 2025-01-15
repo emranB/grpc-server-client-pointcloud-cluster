@@ -3,7 +3,7 @@ version: "3.8"
 services:
   server:
     build:
-      context: .  # Set context to root to ensure access to pointcloud.proto
+      context: .  # Root directory context
       dockerfile: src/cpp/server/server.Dockerfile
     container_name: pointcloud_server_cpp
     ports:
@@ -12,17 +12,16 @@ services:
       - ./config.json:/app/config.json
       - ./data:/app/data
       - ./results:/app/results
+      - ./grpc:/grpc  
     environment:
-      HOST: "0.0.0.0"
-      PORT: "1111"
-      EPS: "0.5"
-      MIN_SAMPLES: "5"
-      MAX_PERCENTILE: "95"
-      MIN_PERCENTILE: "5"
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "1111"
+      SERVER_MAX_PERCENTILE: "80"
+      SERVER_MIN_PERCENTILE: "20"
 
   client:
     build:
-      context: .  # Set context to root to ensure access to pointcloud.proto
+      context: .  # Root directory context
       dockerfile: src/cpp/client/client.Dockerfile
     container_name: pointcloud_client_cpp
     depends_on:
@@ -31,9 +30,11 @@ services:
       - ./config.json:/app/config.json
       - ./data:/app/data
       - ./results:/app/results
+      - ./grpc:/grpc  
     environment:
-      CLIENT_REMOTE_HOST: "pointcloud_server_cpp"
+      CLIENT_REMOTE_HOST: "server"  # Server service name
       CLIENT_REMOTE_PORT: "1111"
-      CLIENT_INPUT_FILE: "data/oct-2-small.pcd"
-      CLIENT_OUTPUT_FILE: "results/oct-2-small-output.labels"
+      CLIENT_INPUT_FILE: "/app/data/oct-2-small.pcd"
+      CLIENT_OUTPUT_FILE: "/app/results/oct-2-small-output.labels"
+      CLIENT_LABELS_FILE: "/app/data/oct-2-small.labels"
       CLIENT_CHUNK_SIZE: "100"

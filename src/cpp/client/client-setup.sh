@@ -14,11 +14,12 @@ apt-get install -y \
     pkg-config \
     wget \
     protobuf-compiler \
-    libprotobuf-dev
+    libprotobuf-dev \
+    libfmt-dev  
 rm -rf /var/lib/apt/lists/*
 
 # Clone and build gRPC
-git clone --recurse-submodules -b v1.66.0 https://github.com/grpc/grpc
+git clone --recurse-submodules -b v1.66.0 https://github.com/grpc/grpc /grpc
 mkdir -p /grpc/cmake/build
 cd /grpc/cmake/build
 cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ../..

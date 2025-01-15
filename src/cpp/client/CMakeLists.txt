@@ -10,9 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Debug: Print source directory
 message(STATUS "CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR}")
 
-# Locate Protobuf and gRPC libraries
+# Locate Protobuf, gRPC, and fmt libraries
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
+find_package(fmt REQUIRED)  # Add fmt dependency
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/build)
@@ -30,5 +31,5 @@ message(STATUS "CLIENT_CPP=${CLIENT_CPP}")
 # Add the client executable
 add_executable(client ${CLIENT_CPP} ${PROTO_SRCS})
 
-# Link Protobuf and gRPC libraries
-target_link_libraries(client gRPC::grpc++ protobuf::libprotobuf)
+# Link Protobuf, gRPC, and fmt libraries
+target_link_libraries(client gRPC::grpc++ protobuf::libprotobuf fmt::fmt)  # Link fmt here

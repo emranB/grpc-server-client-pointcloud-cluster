@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     protobuf-compiler \
     libprotobuf-dev \
+    libfmt-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone the gRPC repository and its submodules
